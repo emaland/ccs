@@ -96,9 +96,9 @@ func (m *Manager) Create(name string, opts CreateOptions) (*Session, error) {
 	// Create branch name
 	branchName := m.cfg.GetBranchName(name)
 
-	// Check if branch already exists
+	// Check if session already exists
 	if m.git.BranchExists(branchName) {
-		return nil, fmt.Errorf("branch %q already exists", branchName)
+		return nil, fmt.Errorf("session %q already exists\n\nUse 'ccs switch %s' to switch to it, or 'ccs finish %s --delete' to remove it", name, name, name)
 	}
 
 	// Create worktree with new branch

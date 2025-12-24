@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -37,11 +36,8 @@ func (t *TmuxTerminal) CreateWindow(name, path, startCmd string) error {
 	}
 	args := []string{"new-window", "-n", windowName, "-c", path}
 	if startCmd != "" {
-		// Start interactive login shell with job control that runs command
-		// Source profile files for PATH, then run command
-		initCmd := fmt.Sprintf(`[[ -r ~/.bash_profile ]] && . ~/.bash_profile || { [[ -r ~/.profile ]] && . ~/.profile; }; [[ -r ~/.bashrc ]] && . ~/.bashrc; %s`, startCmd)
-		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
-		args = append(args, shell, "-c", bashCmd)
+		// Login interactive shell with job control - Ctrl-Z suspends and returns to shell
+		args = append(args, shell, "-lic", startCmd)
 	}
 	return exec.Command("tmux", args...).Run()
 }

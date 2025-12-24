@@ -46,11 +46,8 @@ func (k *KittyTerminal) CreateWindow(name, path, startCmd string) error {
 	}
 	args := []string{"@", "launch", "--type=tab", "--tab-title", tabName, "--cwd", path}
 	if startCmd != "" {
-		// Start interactive login shell with job control that runs command
-		// Source profile files for PATH, then run command
-		initCmd := fmt.Sprintf(`[[ -r ~/.bash_profile ]] && . ~/.bash_profile || { [[ -r ~/.profile ]] && . ~/.profile; }; [[ -r ~/.bashrc ]] && . ~/.bashrc; %s`, startCmd)
-		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
-		args = append(args, shell, "-c", bashCmd)
+		// Login interactive shell with job control - Ctrl-Z suspends and returns to shell
+		args = append(args, shell, "-lic", startCmd)
 	} else {
 		args = append(args, shell, "-li")
 	}

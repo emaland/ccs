@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -148,12 +149,20 @@ func StopProcess(sessionPath string) error {
 }
 
 // StartProcess starts Claude in the given session path with optional args
+// It execs into Claude, replacing the current process for proper TTY control
 func StartProcess(sessionPath string, args []string) error {
-	cmd := exec.Command("claude", args...)
-	cmd.Dir = sessionPath
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Change to session directory first
+	if err := os.Chdir(sessionPath); err != nil {
+		return err
+	}
 
-	return cmd.Start()
+	// Find claude binary
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		return fmt.Errorf("claude not found in PATH: %w", err)
+	}
+
+	// Exec replaces current process with claude
+	argv := append([]string{"claude"}, args...)
+	return syscall.Exec(claudePath, argv, os.Environ())
 }
