@@ -69,14 +69,10 @@ func (m *Manager) Create(name string, opts CreateOptions) (*Session, error) {
 		return nil, err
 	}
 
-	// Determine base
+	// Determine base - always use configured default (main) unless --from specified
 	baseBranch := opts.From
 	if baseBranch == "" {
-		var err error
-		baseBranch, err = m.git.BranchCurrent()
-		if err != nil {
-			baseBranch = m.cfg.DefaultBase
-		}
+		baseBranch = m.cfg.DefaultBase
 	}
 
 	baseCommit, err := m.git.ResolveRef(baseBranch)

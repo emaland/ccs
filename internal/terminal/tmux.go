@@ -37,8 +37,9 @@ func (t *TmuxTerminal) CreateWindow(name, path, startCmd string) error {
 	}
 	args := []string{"new-window", "-n", windowName, "-c", path}
 	if startCmd != "" {
-		// Start interactive shell with job control that runs command
-		initCmd := fmt.Sprintf(`source ~/.bashrc 2>/dev/null; %s`, startCmd)
+		// Start interactive login shell with job control that runs command
+		// Source profile files for PATH, then run command
+		initCmd := fmt.Sprintf(`[[ -r ~/.bash_profile ]] && . ~/.bash_profile || { [[ -r ~/.profile ]] && . ~/.profile; }; [[ -r ~/.bashrc ]] && . ~/.bashrc; %s`, startCmd)
 		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
 		args = append(args, shell, "-c", bashCmd)
 	}

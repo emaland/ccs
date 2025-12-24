@@ -46,9 +46,9 @@ func (k *KittyTerminal) CreateWindow(name, path, startCmd string) error {
 	}
 	args := []string{"@", "launch", "--type=tab", "--tab-title", tabName, "--cwd", path}
 	if startCmd != "" {
-		// Start interactive shell with job control that runs command
-		// Use process substitution to create rcfile that sources bashrc and runs command
-		initCmd := fmt.Sprintf(`source ~/.bashrc 2>/dev/null; %s`, startCmd)
+		// Start interactive login shell with job control that runs command
+		// Source profile files for PATH, then run command
+		initCmd := fmt.Sprintf(`[[ -r ~/.bash_profile ]] && . ~/.bash_profile || { [[ -r ~/.profile ]] && . ~/.profile; }; [[ -r ~/.bashrc ]] && . ~/.bashrc; %s`, startCmd)
 		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
 		args = append(args, shell, "-c", bashCmd)
 	} else {
