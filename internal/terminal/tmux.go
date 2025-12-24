@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -29,9 +31,16 @@ func (t *TmuxTerminal) windowName(name string) string {
 
 func (t *TmuxTerminal) CreateWindow(name, path, startCmd string) error {
 	windowName := t.windowName(name)
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
 	args := []string{"new-window", "-n", windowName, "-c", path}
 	if startCmd != "" {
-		args = append(args, startCmd)
+		// Start interactive shell with job control that runs command
+		initCmd := fmt.Sprintf(`source ~/.bashrc 2>/dev/null; %s`, startCmd)
+		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
+		args = append(args, shell, "-c", bashCmd)
 	}
 	return exec.Command("tmux", args...).Run()
 }

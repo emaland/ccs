@@ -131,6 +131,7 @@ func (m *Manager) Create(name string, opts CreateOptions) (*Session, error) {
 
 	// Create terminal window
 	if !opts.NoTerminal && m.terminal.Name() != "none" {
+		// Pass claude command - terminal handles shell wrapping
 		startCmd := ""
 		if !opts.NoClaude && m.cfg.AutoStartClaude {
 			startCmd = "claude"

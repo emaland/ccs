@@ -40,15 +40,19 @@ func (k *KittyTerminal) tabName(name string) string {
 
 func (k *KittyTerminal) CreateWindow(name, path, startCmd string) error {
 	tabName := k.tabName(name)
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
 	args := []string{"@", "launch", "--type=tab", "--tab-title", tabName, "--cwd", path}
 	if startCmd != "" {
-		args = append(args, startCmd)
+		// Start interactive shell with job control that runs command
+		// Use process substitution to create rcfile that sources bashrc and runs command
+		initCmd := fmt.Sprintf(`source ~/.bashrc 2>/dev/null; %s`, startCmd)
+		bashCmd := fmt.Sprintf(`exec %s --rcfile <(echo %q) -i`, shell, initCmd)
+		args = append(args, shell, "-c", bashCmd)
 	} else {
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "/bin/sh"
-		}
-		args = append(args, shell)
+		args = append(args, shell, "-li")
 	}
 	return exec.Command("kitty", args...).Run()
 }
