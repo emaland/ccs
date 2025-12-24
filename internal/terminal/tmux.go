@@ -1,9 +1,9 @@
 package terminal
 
 import (
-	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/emaland/ccs/internal/config"
 )
@@ -30,16 +30,21 @@ func (t *TmuxTerminal) windowName(name string) string {
 
 func (t *TmuxTerminal) CreateWindow(name, path, startCmd string) error {
 	windowName := t.windowName(name)
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash"
+
+	// Create window with default shell (inherits from tmux/environment)
+	if err := exec.Command("tmux", "new-window", "-n", windowName, "-c", path).Run(); err != nil {
+		return err
 	}
-	args := []string{"new-window", "-n", windowName, "-c", path}
+
 	if startCmd != "" {
-		// Login interactive shell with job control - Ctrl-Z suspends and returns to shell
-		args = append(args, shell, "-lic", startCmd)
+		// Wait for shell to initialize before sending command
+		time.Sleep(200 * time.Millisecond)
+		// Send command as keystrokes to the shell - this gives proper job control
+		// Ctrl-Z suspends and returns to shell prompt, fg resumes
+		// Append "; exit" so shell closes when command exits normally
+		return exec.Command("tmux", "send-keys", "-t", windowName, startCmd+"; exit", "Enter").Run()
 	}
-	return exec.Command("tmux", args...).Run()
+	return nil
 }
 
 func (t *TmuxTerminal) SwitchWindow(name string) error {

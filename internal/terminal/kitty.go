@@ -40,18 +40,24 @@ func (k *KittyTerminal) tabName(name string) string {
 
 func (k *KittyTerminal) CreateWindow(name, path, startCmd string) error {
 	tabName := k.tabName(name)
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash"
-	}
+
+	// Create tab with default shell - capture the window ID from output
 	args := []string{"@", "launch", "--type=tab", "--tab-title", tabName, "--cwd", path}
-	if startCmd != "" {
-		// Login interactive shell with job control - Ctrl-Z suspends and returns to shell
-		args = append(args, shell, "-lic", startCmd)
-	} else {
-		args = append(args, shell, "-li")
+	out, err := exec.Command("kitty", args...).Output()
+	if err != nil {
+		return err
 	}
-	return exec.Command("kitty", args...).Run()
+
+	if startCmd != "" {
+		// Send command as keystrokes to the shell - this gives proper job control
+		// Ctrl-Z suspends and returns to shell prompt, fg resumes
+		// Use the window ID returned by launch
+		windowID := strings.TrimSpace(string(out))
+		// Use PROMPT_COMMAND to exit when no jobs remain (handles Ctrl-Z + fg case)
+		cmd := `PROMPT_COMMAND='[[ -z "$(jobs)" ]] && exit'; ` + startCmd + "\n"
+		return exec.Command("kitty", "@", "send-text", "--match", "id:"+windowID, cmd).Run()
+	}
+	return nil
 }
 
 func (k *KittyTerminal) SwitchWindow(name string) error {
