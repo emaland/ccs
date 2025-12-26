@@ -9,6 +9,7 @@ import (
 	"github.com/emaland/ccs/internal/config"
 	"github.com/emaland/ccs/internal/git"
 	"github.com/emaland/ccs/internal/session"
+	"github.com/emaland/ccs/internal/state"
 	"github.com/emaland/ccs/internal/terminal"
 )
 
@@ -16,6 +17,7 @@ var (
 	cfg      *config.Config
 	gitRepo  git.Git
 	term     terminal.Terminal
+	stateMgr *state.Manager
 	sessMgr  *session.Manager
 	rootCmd  = &cobra.Command{
 		Use:   "ccs",
@@ -38,11 +40,17 @@ while sharing the git object store.`,
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
+			// Initialize state manager (global, not repo-specific)
+			stateMgr, err = state.NewManager()
+			if err != nil {
+				return fmt.Errorf("failed to initialize state: %w", err)
+			}
+
 			// Try to find git repo root
 			repoRoot, err := git.FindRepoRoot(".")
 			if err != nil {
 				// Some commands might not need a repo
-				if cmd.Name() == "shell-init" {
+				if cmd.Name() == "shell-init" || cmd.Name() == "sessions" || cmd.Name() == "cleanup" {
 					return nil
 				}
 				return fmt.Errorf("not in a git repository")
@@ -54,7 +62,7 @@ while sharing the git object store.`,
 			}
 
 			term = terminal.Detect(cfg)
-			sessMgr = session.NewManager(cfg, gitRepo, term)
+			sessMgr = session.NewManager(cfg, gitRepo, term, stateMgr)
 
 			return nil
 		},

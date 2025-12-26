@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/emaland/ccs/internal/claude"
 	"github.com/emaland/ccs/internal/config"
 	"github.com/emaland/ccs/internal/git"
+	"github.com/emaland/ccs/internal/state"
 	"github.com/emaland/ccs/internal/terminal"
 )
 
@@ -37,14 +39,16 @@ type Manager struct {
 	cfg      *config.Config
 	git      git.Git
 	terminal terminal.Terminal
+	state    *state.Manager
 }
 
 // NewManager creates a new session manager
-func NewManager(cfg *config.Config, g git.Git, term terminal.Terminal) *Manager {
+func NewManager(cfg *config.Config, g git.Git, term terminal.Terminal, stateMgr *state.Manager) *Manager {
 	return &Manager{
 		cfg:      cfg,
 		git:      g,
 		terminal: term,
+		state:    stateMgr,
 	}
 }
 
@@ -113,6 +117,20 @@ func (m *Manager) Create(name string, opts CreateOptions) (*Session, error) {
 		BaseBranch: baseBranch,
 		BaseCommit: baseCommit,
 		RepoRoot:   m.git.RepoRoot(),
+	}
+
+	// Save to global state
+	if m.state != nil {
+		m.state.AddSession(state.SessionState{
+			Name:       name,
+			RepoPath:   m.git.RepoRoot(),
+			RepoName:   m.git.RepoName(),
+			WorkTree:   worktreePath,
+			Branch:     branchName,
+			BaseBranch: baseBranch,
+			CreatedAt:  time.Now(),
+			LastAccess: time.Now(),
+		})
 	}
 
 	// Run post-create hook
@@ -314,6 +332,11 @@ func (m *Manager) Delete(name string, force bool) error {
 	if err := m.git.BranchDelete(session.Branch, force); err != nil {
 		// Non-fatal
 		fmt.Fprintf(os.Stderr, "Warning: could not delete branch %s: %v\n", session.Branch, err)
+	}
+
+	// Remove from global state
+	if m.state != nil {
+		m.state.RemoveSession(session.Path)
 	}
 
 	return nil
