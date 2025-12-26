@@ -62,6 +62,10 @@ ccs log my-feature
 ccs finish my-feature --squash  # Squash merge to main
 ccs finish my-feature --pr      # Push for PR
 ccs finish my-feature --delete  # Delete without merging
+
+# Global commands (work from anywhere)
+ccs sessions                    # List all sessions across repos
+ccs cleanup                     # Remove stale sessions
 ```
 
 ## Commands
@@ -149,6 +153,23 @@ ccs finish my-feature --delete   # Delete without merging
 ccs finish my-feature --force    # Skip confirmation/hooks
 ```
 
+### `ccs sessions`
+
+List all sessions globally, across all repositories.
+
+```bash
+ccs sessions        # List all sessions
+ccs sessions --json # JSON output
+```
+
+### `ccs cleanup`
+
+Remove stale sessions from global state (worktrees that no longer exist).
+
+```bash
+ccs cleanup
+```
+
 ## Configuration
 
 Global config at `~/.config/ccs/config.toml`:
@@ -217,7 +238,8 @@ When a session is created or resumed:
 └── other-repo/
 
 ~/.config/ccs/
-└── config.toml
+├── config.toml
+└── state.json         # Tracks all sessions globally
 ```
 
 ## Session Lifecycle
