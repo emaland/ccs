@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -90,20 +91,28 @@ var lsCmd = &cobra.Command{
 
 			claudeStr := fmt.Sprintf("claude: %s", out.ClaudeState)
 
-			line := fmt.Sprintf("%s %-18s %-22s %-10s %s",
+			// Shorten path for display
+			path := out.Path
+			if home, err := os.UserHomeDir(); err == nil {
+				if rel, err := filepath.Rel(home, path); err == nil && len(rel) < len(path) {
+					path = "~/" + rel
+				}
+			}
+
+			line := fmt.Sprintf("%s %-18s %-10s %-15s %s",
 				marker,
 				out.Name,
-				out.Branch,
 				filesStr,
 				claudeStr,
+				path,
 			)
 
 			if out.TerminalInfo != "" {
-				line += "   " + out.TerminalInfo
+				line += "  " + out.TerminalInfo
 			}
 
 			if lsVerbose {
-				line += "\n    " + out.Path
+				line += "\n    branch: " + out.Branch
 			}
 
 			fmt.Println(strings.TrimRight(line, " "))
