@@ -66,6 +66,9 @@ ccs finish my-feature --delete  # Delete without merging
 # Global commands (work from anywhere)
 ccs sessions                    # List all sessions across repos
 ccs cleanup                     # Remove stale sessions
+
+# Interactive TUI
+ccs ui                          # Open dashboard for all sessions
 ```
 
 ## Commands
@@ -169,6 +172,39 @@ Remove stale sessions from global state (worktrees that no longer exist).
 ```bash
 ccs cleanup
 ```
+
+### `ccs ui`
+
+Open an interactive TUI dashboard for managing all sessions across all repositories.
+
+```bash
+ccs ui
+```
+
+The dashboard shows:
+- Session name
+- Repository name
+- Status (commits ahead, uncommitted changes)
+- Files changed
+- Claude state (running/waiting/idle)
+
+**Keyboard shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` or `↑`/`↓` | Navigate sessions |
+| `Enter` | Switch to session |
+| `n` | Create new session |
+| `r` | Resume session (restart Claude) |
+| `p` | Pause session (stop Claude) |
+| `P` | Pause all sessions |
+| `d` | View diff |
+| `l` | View log |
+| `f` | Finish session |
+| `?` | Toggle help |
+| `q` | Quit |
+
+The TUI updates automatically every 2 seconds to reflect Claude state changes.
 
 ## Configuration
 

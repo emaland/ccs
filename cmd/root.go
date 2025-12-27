@@ -49,8 +49,9 @@ while sharing the git object store.`,
 			// Try to find git repo root
 			repoRoot, err := git.FindRepoRoot(".")
 			if err != nil {
-				// Some commands might not need a repo
-				if cmd.Name() == "shell-init" || cmd.Name() == "sessions" || cmd.Name() == "cleanup" {
+				// Some commands work without a repo (using global state)
+				if cmd.Name() == "shell-init" || cmd.Name() == "sessions" || cmd.Name() == "cleanup" || cmd.Name() == "switch" || cmd.Name() == "ui" {
+					term = terminal.Detect(cfg)
 					return nil
 				}
 				return fmt.Errorf("not in a git repository")

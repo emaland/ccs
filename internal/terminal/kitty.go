@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -20,9 +19,8 @@ func NewKittyTerminal(cfg *config.Config) *KittyTerminal {
 	if os.Getenv("KITTY_WINDOW_ID") == "" {
 		return nil
 	}
-	// Test remote control
+	// Test remote control - silently fail if not available (e.g., no TTY)
 	if exec.Command("kitty", "@", "ls").Run() != nil {
-		fmt.Fprintln(os.Stderr, "Warning: Kitty remote control disabled. Add 'allow_remote_control yes' to kitty.conf")
 		return nil
 	}
 	return &KittyTerminal{

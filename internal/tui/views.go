@@ -32,10 +32,11 @@ func (m Model) updateViewport(msg tea.Msg, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 func (m Model) viewDiff() string {
 	var b strings.Builder
 
-	// Title
+	// Title - show both session name and repo
 	sessName := ""
 	if len(m.sessions) > 0 && m.selected < len(m.sessions) {
-		sessName = m.sessions[m.selected].Name
+		sess := m.sessions[m.selected]
+		sessName = fmt.Sprintf("%s (%s)", sess.Name, sess.RepoName)
 	}
 
 	title := diffHeaderStyle.Render(fmt.Sprintf("Diff: %s", sessName))
@@ -62,10 +63,11 @@ func (m Model) viewDiff() string {
 func (m Model) viewLog() string {
 	var b strings.Builder
 
-	// Title
+	// Title - show both session name and repo
 	sessName := ""
 	if len(m.sessions) > 0 && m.selected < len(m.sessions) {
-		sessName = m.sessions[m.selected].Name
+		sess := m.sessions[m.selected]
+		sessName = fmt.Sprintf("%s (%s)", sess.Name, sess.RepoName)
 	}
 
 	title := diffHeaderStyle.Render(fmt.Sprintf("Log: %s", sessName))

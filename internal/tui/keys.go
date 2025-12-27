@@ -21,10 +21,11 @@ type KeyMap struct {
 	Filter    key.Binding
 
 	// General
-	Help   key.Binding
-	Quit   key.Binding
-	Back   key.Binding
-	Cancel key.Binding
+	Help    key.Binding
+	Quit    key.Binding
+	Suspend key.Binding
+	Back    key.Binding
+	Cancel  key.Binding
 	Confirm key.Binding
 }
 
@@ -86,6 +87,10 @@ func DefaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
+		),
+		Suspend: key.NewBinding(
+			key.WithKeys("ctrl+z"),
+			key.WithHelp("ctrl+z", "suspend"),
 		),
 		Back: key.NewBinding(
 			key.WithKeys("q", "esc"),

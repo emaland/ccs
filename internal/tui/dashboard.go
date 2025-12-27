@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,8 +42,8 @@ func (m Model) updateDashboard(msg tea.Msg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		case key.Matches(msg, m.keys.Select):
 			if len(m.sessions) > 0 {
 				sess := m.sessions[m.selected]
-				m.switchToSession = sess.Name
-				return m, tea.Quit
+				// Switch terminal window without exiting TUI
+				cmds = append(cmds, m.switchSession(sess.Name))
 			}
 
 		case key.Matches(msg, m.keys.New):
@@ -52,13 +55,13 @@ func (m Model) updateDashboard(msg tea.Msg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		case key.Matches(msg, m.keys.Resume):
 			if len(m.sessions) > 0 {
 				sess := m.sessions[m.selected]
-				cmds = append(cmds, m.resumeSession(sess.Name))
+				cmds = append(cmds, m.resumeSession(sess.Name, sess.Path))
 			}
 
 		case key.Matches(msg, m.keys.Pause):
 			if len(m.sessions) > 0 {
 				sess := m.sessions[m.selected]
-				cmds = append(cmds, m.pauseSession(sess.Name))
+				cmds = append(cmds, m.pauseSession(sess.Path))
 			}
 
 		case key.Matches(msg, m.keys.PauseAll):
@@ -68,14 +71,14 @@ func (m Model) updateDashboard(msg tea.Msg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 			if len(m.sessions) > 0 {
 				sess := m.sessions[m.selected]
 				m.view = viewDiff
-				cmds = append(cmds, m.loadDiff(sess.Session.Path))
+				cmds = append(cmds, m.loadDiff(sess.Path, sess.BaseBranch))
 			}
 
 		case key.Matches(msg, m.keys.Log):
 			if len(m.sessions) > 0 {
 				sess := m.sessions[m.selected]
 				m.view = viewLog
-				cmds = append(cmds, m.loadLog(sess.Session.Path))
+				cmds = append(cmds, m.loadLog(sess.Path, sess.BaseBranch))
 			}
 
 		case key.Matches(msg, m.keys.Finish):
@@ -120,8 +123,8 @@ func (m Model) viewDashboard() string {
 	}
 
 	// Table header
-	header := fmt.Sprintf("  %-18s %-12s %-8s %-10s %s",
-		"NAME", "STATUS", "FILES", "CLAUDE", "PATH")
+	header := fmt.Sprintf("  %-18s %-14s %-12s %-8s %-10s",
+		"NAME", "REPO", "STATUS", "FILES", "CLAUDE")
 	b.WriteString(tableHeaderStyle.Render(header) + "\n")
 
 	// Table rows
@@ -156,18 +159,12 @@ func (m Model) viewDashboard() string {
 			claudeState = string(sess.Status.ClaudeState)
 		}
 
-		// Path (shortened)
-		path := sess.Session.Path
-		if len(path) > 30 {
-			path = "..." + path[len(path)-27:]
-		}
-
-		row := fmt.Sprintf("%-18s %-12s %-8s %-10s %s",
+		row := fmt.Sprintf("%-18s %-14s %-12s %-8s %-10s",
 			truncate(sess.Name, 18),
+			truncate(sess.RepoName, 14),
 			truncate(status, 12),
 			files,
 			styledClaudeState(claudeState),
-			path,
 		)
 
 		b.WriteString(cursor + rowStyle.Render(row) + "\n")
@@ -196,26 +193,80 @@ func (m Model) viewDashboard() string {
 }
 
 // Helper commands
-func (m Model) resumeSession(name string) tea.Cmd {
+func (m Model) switchSession(name string) tea.Cmd {
 	return func() tea.Msg {
-		sess, err := m.sessMgr.Get(name)
-		if err != nil {
-			return errorMsg(err)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if os.Getenv("KITTY_WINDOW_ID") != "" {
+			if err := exec.CommandContext(ctx, "kitty", "@", "focus-tab", "--match", "title:^"+name+"$").Run(); err != nil {
+				return errorMsg(fmt.Errorf("kitty focus-tab failed: %w", err))
+			}
+		} else if os.Getenv("TMUX") != "" {
+			if err := exec.CommandContext(ctx, "tmux", "select-window", "-t", name).Run(); err != nil {
+				return errorMsg(fmt.Errorf("tmux select-window failed: %w", err))
+			}
 		}
-		if err := claude.StartProcess(sess.Path, []string{"--continue"}); err != nil {
-			return errorMsg(err)
+		return nil
+	}
+}
+
+func (m Model) resumeSession(name, path string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Try to send command to existing tab, or create new one
+		if os.Getenv("KITTY_WINDOW_ID") != "" {
+			// Check if tab exists by trying to focus it
+			if exec.CommandContext(ctx, "kitty", "@", "focus-tab", "--match", "title:^"+name+"$").Run() == nil {
+				// Tab exists - send the command
+				cmd := `claude --continue` + "\n"
+				if err := exec.CommandContext(ctx, "kitty", "@", "send-text", "--match", "title:^"+name+"$", cmd).Run(); err != nil {
+					return errorMsg(fmt.Errorf("send-text failed: %w", err))
+				}
+			} else {
+				// Create new tab and start Claude
+				out, err := exec.CommandContext(ctx, "kitty", "@", "launch", "--type=tab", "--tab-title", name, "--cwd", path).CombinedOutput()
+				if err != nil {
+					return errorMsg(fmt.Errorf("launch failed: %w (output: %s)", err, string(out)))
+				}
+				// Wait for shell to initialize
+				time.Sleep(200 * time.Millisecond)
+				cmd := `PROMPT_COMMAND='[[ -z "$(jobs)" ]] && exit'; claude --continue` + "\n"
+				// Use window ID if we got one, otherwise match by recent
+				windowID := strings.TrimSpace(string(out))
+				var sendErr error
+				if windowID != "" {
+					sendErr = exec.CommandContext(ctx, "kitty", "@", "send-text", "--match", "id:"+windowID, cmd).Run()
+				} else {
+					sendErr = exec.CommandContext(ctx, "kitty", "@", "send-text", "--match", "recent:0", cmd).Run()
+				}
+				if sendErr != nil {
+					return errorMsg(fmt.Errorf("send-text failed (windowID=%q): %w", windowID, sendErr))
+				}
+			}
+		} else if os.Getenv("TMUX") != "" {
+			// Check if window exists
+			if exec.CommandContext(ctx, "tmux", "select-window", "-t", name).Run() == nil {
+				// Window exists - send the command
+				if err := exec.CommandContext(ctx, "tmux", "send-keys", "-t", name, "claude --continue", "Enter").Run(); err != nil {
+					return errorMsg(fmt.Errorf("tmux send-keys failed: %w", err))
+				}
+			} else {
+				// Create new window and start Claude
+				if err := exec.CommandContext(ctx, "tmux", "new-window", "-n", name, "-c", path, "claude --continue").Run(); err != nil {
+					return errorMsg(fmt.Errorf("tmux new-window failed: %w", err))
+				}
+			}
 		}
 		return sessionsLoadedMsg(nil) // Trigger refresh
 	}
 }
 
-func (m Model) pauseSession(name string) tea.Cmd {
+func (m Model) pauseSession(path string) tea.Cmd {
 	return func() tea.Msg {
-		sess, err := m.sessMgr.Get(name)
-		if err != nil {
-			return errorMsg(err)
-		}
-		if err := claude.StopProcess(sess.Path); err != nil {
+		if err := claude.StopProcess(path); err != nil {
 			return errorMsg(err)
 		}
 		return sessionsLoadedMsg(nil) // Trigger refresh
@@ -224,20 +275,19 @@ func (m Model) pauseSession(name string) tea.Cmd {
 
 func (m Model) pauseAllSessions() tea.Cmd {
 	return func() tea.Msg {
-		sessions, err := m.sessMgr.List()
-		if err != nil {
-			return errorMsg(err)
-		}
-		for _, sess := range sessions {
+		for _, sess := range m.sessions {
 			claude.StopProcess(sess.Path)
 		}
 		return sessionsLoadedMsg(nil) // Trigger refresh
 	}
 }
 
-func (m Model) loadDiff(path string) tea.Cmd {
+func (m Model) loadDiff(path, baseBranch string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("git", "diff", m.cfg.DefaultBase+"..HEAD")
+		if baseBranch == "" {
+			baseBranch = m.cfg.DefaultBase
+		}
+		cmd := exec.Command("git", "diff", baseBranch+"..HEAD")
 		cmd.Dir = path
 		out, err := cmd.Output()
 		if err != nil {
@@ -250,9 +300,12 @@ func (m Model) loadDiff(path string) tea.Cmd {
 	}
 }
 
-func (m Model) loadLog(path string) tea.Cmd {
+func (m Model) loadLog(path, baseBranch string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("git", "log", "--oneline", m.cfg.DefaultBase+"..HEAD")
+		if baseBranch == "" {
+			baseBranch = m.cfg.DefaultBase
+		}
+		cmd := exec.Command("git", "log", "--oneline", baseBranch+"..HEAD")
 		cmd.Dir = path
 		out, err := cmd.Output()
 		if err != nil {

@@ -1,14 +1,19 @@
 package tui
 
 import (
+	"fmt"
+	"os"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/emaland/ccs/internal/claude"
 	"github.com/emaland/ccs/internal/config"
+	"github.com/emaland/ccs/internal/git"
 	"github.com/emaland/ccs/internal/session"
 	"github.com/emaland/ccs/internal/state"
 )
@@ -25,10 +30,14 @@ const (
 	viewFinishConfirm
 )
 
-// SessionData extends session.Session with display data
+// SessionData extends session state with display data
 type SessionData struct {
-	*session.Session
-	Status *session.Status
+	Name       string
+	RepoName   string
+	Path       string
+	Branch     string
+	BaseBranch string
+	Status     *session.Status
 }
 
 // Model is the main TUI model
@@ -130,19 +139,45 @@ func tickCmd() tea.Cmd {
 	})
 }
 
-// loadSessions loads session data
+// loadSessions loads session data from global state
 func (m Model) loadSessions() tea.Msg {
-	sessions, err := m.sessMgr.List()
-	if err != nil {
-		return errorMsg(err)
+	if m.stateMgr == nil {
+		return errorMsg(fmt.Errorf("state manager not available"))
 	}
 
+	globalSessions := m.stateMgr.GetAllSessions()
 	var data []SessionData
-	for _, sess := range sessions {
-		status, _ := m.sessMgr.GetStatus(sess)
+
+	for _, sess := range globalSessions {
+		// Get status for each session
+		status := &session.Status{
+			ClaudeState: claude.GetState(sess.WorkTree),
+		}
+
+		// Try to get diff stats if the worktree exists
+		if _, err := os.Stat(sess.WorkTree); err == nil {
+			g, err := git.NewExecGit(sess.WorkTree)
+			if err == nil {
+				mergeBase, _ := g.MergeBase(sess.BaseBranch, "HEAD")
+				if mergeBase == "" {
+					mergeBase = sess.BaseBranch
+				}
+				if diffStat, err := g.DiffStat(mergeBase, "HEAD"); err == nil {
+					status.FilesChanged = diffStat.FilesChanged
+				}
+				if commitCount, err := g.CommitCount(mergeBase, "HEAD"); err == nil {
+					status.CommitsAhead = commitCount
+				}
+			}
+		}
+
 		data = append(data, SessionData{
-			Session: sess,
-			Status:  status,
+			Name:       sess.Name,
+			RepoName:   sess.RepoName,
+			Path:       sess.WorkTree,
+			Branch:     sess.Branch,
+			BaseBranch: sess.BaseBranch,
+			Status:     status,
 		})
 	}
 
@@ -152,6 +187,13 @@ func (m Model) loadSessions() tea.Msg {
 // Update implements tea.Model
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// Handle Ctrl-Z suspend globally
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if key.Matches(keyMsg, m.keys.Suspend) {
+			return m, tea.Suspend
+		}
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
